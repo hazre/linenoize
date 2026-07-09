@@ -1,6 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const Io = std.Io;
+const File = Io.File;
+const Dir = Io.Dir;
 
 const max_line_len = 4096;
 
@@ -54,12 +57,12 @@ pub const History = struct {
     }
 
     /// Loads the history from a file
-    pub fn load(self: *Self, path: []const u8) !void {
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
+    pub fn load(self: *Self, path: []const u8, io: Io) !void {
+        const file = try Dir.cwd().openFile(io, path, .{});
+        defer file.close(io);
 
         var read_buf: [4096]u8 = undefined;
-        var reader = file.reader(&read_buf);
+        var reader = file.reader(io, &read_buf);
         while (true) {
             const maybe_line = reader.interface.takeDelimiter('\n') catch |err| switch (err) {
                 error.StreamTooLong => return err,
@@ -73,13 +76,13 @@ pub const History = struct {
     }
 
     /// Saves the history to a file
-    pub fn save(self: *Self, path: []const u8) !void {
-        const file = try std.fs.cwd().createFile(path, .{});
-        defer file.close();
+    pub fn save(self: *Self, path: []const u8, io: Io) !void {
+        const file = try Dir.cwd().createFile(io, path, .{});
+        defer file.close(io);
 
         for (self.hist.items) |line| {
-            try file.writeAll(line);
-            try file.writeAll("\n");
+            try file.writeStreamingAll(io, line);
+            try file.writeStreamingAll(io, "\n");
         }
     }
 

@@ -14,7 +14,7 @@
         "build.zig",
         "build.zig.zon",
         "examples/",
-        "includes/",
+        "include/",
         "src/",
     },
 }

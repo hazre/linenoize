@@ -25,11 +25,11 @@ pub fn build(b: *Build) void {
             .root_source_file = b.path("src/c.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
         .linkage = .static,
     });
     lib.root_module.addImport("wcwidth", wcwidth);
-    lib.linkLibC();
     b.installArtifact(lib);
 
     // Tests
@@ -64,12 +64,12 @@ pub fn build(b: *Build) void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
     c_example.root_module.addCSourceFile(.{ .file = b.path("examples/example.c") });
-    c_example.addIncludePath(b.path("include"));
-    c_example.linkLibC();
-    c_example.linkLibrary(lib);
+    c_example.root_module.addIncludePath(b.path("include"));
+    c_example.root_module.linkLibrary(lib);
 
     var c_example_run = b.addRunArtifact(c_example);
 

@@ -144,13 +144,13 @@ export fn linenoiseHistorySetMaxLen(len: c_int) c_int {
 
 export fn linenoiseHistorySave(filename: [*:0]const u8) c_int {
     if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
-    global_linenoise.?.history.save(mem.span(filename)) catch return -1;
+    global_linenoise.?.history.save(mem.span(filename), global_linenoise.?.io) catch return -1;
     return 0;
 }
 
 export fn linenoiseHistoryLoad(filename: [*:0]const u8) c_int {
     if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
-    global_linenoise.?.history.load(mem.span(filename)) catch return -1;
+    global_linenoise.?.history.load(mem.span(filename), global_linenoise.?.io) catch return -1;
     return 0;
 }
 

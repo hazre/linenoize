@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
-const File = std.fs.File;
+const File = std.Io.File;
 const math = std.math;
 
 const Linenoise = @import("main.zig").Linenoise;
@@ -139,7 +139,7 @@ pub const LinenoiseState = struct {
             .stdin = in,
             .stdout = out,
             .prompt = prompt,
-            .cols = getColumns(in, out) catch 80,
+            .cols = getColumns(ln.io, in, out) catch 80,
         };
     }
 
@@ -168,7 +168,7 @@ pub const LinenoiseState = struct {
                     const old_pos = self.pos;
 
                     // Show suggested completion
-                    self.buf = .{};
+                    self.buf = .empty;
                     try self.buf.appendSlice(self.allocator, completions[i]);
                     self.pos = self.buf.items.len;
 
@@ -184,7 +184,7 @@ pub const LinenoiseState = struct {
                 }
 
                 // Read next key
-                const nread = try self.stdin.read(&input_buf);
+                const nread = try term.read(self.stdin, &input_buf);
                 c = if (nread == 1) input_buf[0] else return error.NothingRead;
 
                 switch (c.?) {
@@ -206,7 +206,7 @@ pub const LinenoiseState = struct {
                             // Replace buffer with text in the selected
                             // completion
                             self.buf.deinit(self.allocator);
-                            self.buf = .{};
+                    self.buf = .empty;
                             try self.buf.appendSlice(self.allocator, completions[i]);
 
                             self.pos = self.buf.items.len;
@@ -230,7 +230,7 @@ pub const LinenoiseState = struct {
 
     fn refreshSingleLine(self: *Self) !void {
         var write_buf: [4096]u8 = undefined;
-        var file_writer = self.stdout.writerStreaming(&write_buf);
+        var file_writer = self.stdout.writerStreaming(self.ln.io, &write_buf);
         var writer = &file_writer.interface;
 
         const hint = try self.getHint();
@@ -312,7 +312,7 @@ pub const LinenoiseState = struct {
 
     fn refreshMultiLine(self: *Self) !void {
         var write_buf: [4096]u8 = undefined;
-        var file_writer = self.stdout.writerStreaming(&write_buf);
+        var file_writer = self.stdout.writerStreaming(self.ln.io, &write_buf);
         var writer = &file_writer.interface;
 
         const hint = try self.getHint();
@@ -503,7 +503,7 @@ pub const LinenoiseState = struct {
 
             // Copy history entry to the current line buffer
             self.buf.deinit(self.allocator);
-            self.buf = .{};
+            self.buf = .empty;
             try self.buf.appendSlice(self.allocator, self.ln.history.hist.items[new_index]);
             self.pos = self.buf.items.len;
 
