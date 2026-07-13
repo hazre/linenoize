@@ -7,7 +7,6 @@ const Io = std.Io;
 const LinenoiseState = @import("state.zig").LinenoiseState;
 pub const History = @import("history.zig").History;
 const term = @import("term.zig");
-const isUnsupportedTerm = term.isUnsupportedTerm;
 const enableRawMode = term.enableRawMode;
 const disableRawMode = term.disableRawMode;
 const getColumns = term.getColumns;
@@ -139,7 +138,7 @@ fn linenoiseEdit(ln: *Linenoise, in: File, out: File, prompt: []const u8) !?[]co
             key_ctrl_f => try state.editMoveRight(),
             key_ctrl_k => try state.editKillLineForward(),
             key_ctrl_l => {
-                try term.clearScreen();
+                try term.clearScreen(ln.io);
                 try state.refreshLine();
             },
             key_enter => {
@@ -171,33 +170,34 @@ fn linenoiseEdit(ln: *Linenoise, in: File, out: File, prompt: []const u8) !?[]co
 
 /// Read a line with custom line editing mechanics. This includes hints,
 /// completions and history
-fn linenoiseRaw(ln: *Linenoise, in: File, out: File, io: Io, prompt: []const u8) !?[]const u8 {
+fn linenoiseRaw(ln: *Linenoise, in: File, out: File, prompt: []const u8) !?[]const u8 {
     defer {
         if (ln.print_newline)
-            out.writeStreamingAll(io, "\n") catch {};
+            out.writeStreamingAll(ln.io, "\n") catch {};
     }
 
-    const orig = try enableRawMode(io, in, out);
-    defer disableRawMode(io, in, out, orig);
+    const orig = try enableRawMode(ln.io, in, out);
+    defer disableRawMode(ln.io, in, out, orig);
 
     return try linenoiseEdit(ln, in, out, prompt);
 }
 
 /// Read a line with no special features (no hints, no completions, no history)
-fn linenoiseNoTTY(allocator: Allocator, stdin: File, io: Io) !?[]const u8 {
+fn linenoiseNoTTY(ln: *Linenoise, stdin: File) !?[]const u8 {
     var read_buf: [4096]u8 = undefined;
-    var reader = stdin.readerStreaming(io, &read_buf);
+    var reader = stdin.readerStreaming(ln.io, &read_buf);
     const maybe_line = reader.interface.takeDelimiter('\n') catch |err| switch (err) {
         error.StreamTooLong => return err,
         error.ReadFailed => return err,
     };
     const line = maybe_line orelse return null;
-    return try allocator.dupe(u8, line);
+    return try ln.allocator.dupe(u8, line);
 }
 
 pub const Linenoise = struct {
     allocator: Allocator,
     io: Io,
+    environ_map: *const std.process.Environ.Map,
     history: History,
     multiline_mode: bool = false,
     mask_mode: bool = false,
@@ -213,18 +213,18 @@ pub const Linenoise = struct {
     const Self = @This();
 
     /// Initialize a linenoise struct
-    pub fn init(allocator: Allocator) Self {
-        return initWithFiles(allocator, File.stdin(), File.stdout());
+    pub fn init(allocator: Allocator, io: Io, environ: *const std.process.Environ.Map) Self {
+        return initWithFiles(allocator, io, environ, File.stdin(), File.stdout());
     }
 
     /// Initialize a linenoise struct with specific input and output streams
     /// Use this method to connect linenoise to the files of your choosing
     /// like /dev/tty on Linux or \\.\CONIN$ on Windows
-    pub fn initWithFiles(allocator: Allocator, input: File, output: File) Self {
-        const io = Io.Threaded.global_single_threaded.io();
+    pub fn initWithFiles(allocator: Allocator, io: Io, environ: *const std.process.Environ.Map, input: File, output: File) Self {
         var self = Self{
             .allocator = allocator,
             .io = io,
+            .environ_map = environ,
             .history = History.empty(allocator),
             .stdin_file = input,
             .stdout_file = output,
@@ -243,7 +243,7 @@ pub const Linenoise = struct {
     /// enabled or not.
     pub fn examineStdIo(self: *Self) void {
         self.is_tty = self.stdin_file.isTty(self.io) catch false;
-        self.term_supported = !isUnsupportedTerm();
+        self.term_supported = !term.isUnsupportedTerm(self.environ_map);
     }
 
     /// Reads a line from the terminal. Caller owns returned memory
@@ -253,9 +253,9 @@ pub const Linenoise = struct {
         }
 
         return if (self.is_tty and self.term_supported)
-            try linenoiseRaw(self, self.stdin_file, self.stdout_file, self.io, prompt)
+            try linenoiseRaw(self, self.stdin_file, self.stdout_file, prompt)
         else
-            try linenoiseNoTTY(self.allocator, self.stdin_file, self.io);
+            try linenoiseNoTTY(self, self.stdin_file);
     }
 };
 

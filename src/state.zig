@@ -155,7 +155,7 @@ pub const LinenoiseState = struct {
         }
 
         if (completions.len == 0) {
-            try term.beep();
+            try term.beep(self.ln.io);
         } else {
             var finished = false;
             var i: usize = 0;
@@ -191,7 +191,7 @@ pub const LinenoiseState = struct {
                     key_tab => {
                         // Next completion
                         i = (i + 1) % (completions.len + 1);
-                        if (i == completions.len) try term.beep();
+                        if (i == completions.len) try term.beep(self.ln.io);
                     },
                     key_esc => {
                         // Stop browsing completions, return to buffer displayed
@@ -206,7 +206,7 @@ pub const LinenoiseState = struct {
                             // Replace buffer with text in the selected
                             // completion
                             self.buf.deinit(self.allocator);
-                    self.buf = .empty;
+                            self.buf = .empty;
                             try self.buf.appendSlice(self.allocator, completions[i]);
 
                             self.pos = self.buf.items.len;

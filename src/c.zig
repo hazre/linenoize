@@ -7,7 +7,18 @@ const Linenoise = @import("main.zig").Linenoise;
 const term = @import("term.zig");
 
 const global_allocator = std.heap.c_allocator;
+const global_io = std.Io.Threaded.global_single_threaded.io();
+var global_environ_map: std.process.Environ.Map = undefined;
+var global_is_initialized = false;
 var global_linenoise: ?Linenoise = null;
+
+fn ensureInit() void {
+    if (!global_is_initialized) {
+        global_environ_map = std.process.Environ.Map.init(global_allocator);
+        global_linenoise = Linenoise.init(global_allocator, global_io, &global_environ_map);
+        global_is_initialized = true;
+    }
+}
 
 var c_completion_callback: ?linenoiseCompletionCallback = null;
 var c_hints_callback: ?linenoiseHintsCallback = null;
@@ -32,13 +43,13 @@ const linenoiseFreeHintsCallback = *const fn (*anyopaque) callconv(.c) void;
 
 export fn linenoiseSetCompletionCallback(fun: linenoiseCompletionCallback) void {
     c_completion_callback = fun;
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.completions_callback = completionsCallback;
 }
 
 export fn linenoiseSetHintsCallback(fun: linenoiseHintsCallback) void {
     c_hints_callback = fun;
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.hints_callback = hintsCallback;
 }
 
@@ -118,7 +129,7 @@ fn hintsCallback(allocator: Allocator, line: []const u8) !?[]const u8 {
 }
 
 export fn linenoise(prompt: [*:0]const u8) ?[*:0]u8 {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     const result = global_linenoise.?.linenoise(mem.span(prompt)) catch return null;
     if (result) |line| {
         defer global_allocator.free(line);
@@ -131,35 +142,35 @@ export fn linenoiseFree(ptr: *anyopaque) void {
 }
 
 export fn linenoiseHistoryAdd(line: [*:0]const u8) c_int {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.history.add(mem.span(line)) catch return -1;
     return 0;
 }
 
 export fn linenoiseHistorySetMaxLen(len: c_int) c_int {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.history.setMaxLen(@intCast(len));
     return 0;
 }
 
 export fn linenoiseHistorySave(filename: [*:0]const u8) c_int {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.history.save(mem.span(filename), global_linenoise.?.io) catch return -1;
     return 0;
 }
 
 export fn linenoiseHistoryLoad(filename: [*:0]const u8) c_int {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.history.load(mem.span(filename), global_linenoise.?.io) catch return -1;
     return 0;
 }
 
 export fn linenoiseClearScreen() void {
-    term.clearScreen() catch return;
+    if (global_linenoise) |*ln| term.clearScreen(ln.io) catch return;
 }
 
 export fn linenoiseSetMultiLine(ml: c_int) void {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.multiline_mode = ml != 0;
 }
 
@@ -167,11 +178,11 @@ export fn linenoiseSetMultiLine(ml: c_int) void {
 export fn linenoisePrintKeyCodes() void {}
 
 export fn linenoiseMaskModeEnable() void {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.mask_mode = true;
 }
 
 export fn linenoiseMaskModeDisable() void {
-    if (global_linenoise == null) global_linenoise = Linenoise.init(global_allocator);
+    ensureInit();
     global_linenoise.?.mask_mode = false;
 }

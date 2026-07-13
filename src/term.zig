@@ -8,10 +8,10 @@ const is_windows = builtin.os.tag == .windows;
 const termios = if (!is_windows) std.posix.termios else struct { inMode: w.DWORD, outMode: w.DWORD };
 const Io = std.Io;
 
-pub fn isUnsupportedTerm() bool {
-    const env_var = std.c.getenv("TERM") orelse return false;
+pub fn isUnsupportedTerm(environ: *const std.process.Environ.Map) bool {
+    const env_var = environ.get("TERM") orelse return false;
     return for (unsupported_term) |t| {
-        if (std.ascii.eqlIgnoreCase(std.mem.sliceTo(env_var, 0), t))
+        if (std.ascii.eqlIgnoreCase(env_var, t))
             break true;
     } else false;
 }
@@ -24,6 +24,8 @@ const w = if (is_windows) struct {
     pub const BOOL = windows.BOOL;
     pub const HANDLE = windows.HANDLE;
     pub const WCHAR = windows.WCHAR;
+
+    // These structs were removed from std.os.windows in 0.16.0, we are adding it back here https://codeberg.org/ziglang/zig/commit/c77e7146f5fa8e83c06cd6612b7298df06912974
     pub const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
         dwSize: windows.COORD,
         dwCursorPosition: windows.COORD,
@@ -37,6 +39,7 @@ const w = if (is_windows) struct {
         Right: windows.SHORT,
         Bottom: windows.SHORT,
     };
+
     pub const ENABLE_VIRTUAL_TERMINAL_PROCESSING = windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     pub const ENABLE_VIRTUAL_TERMINAL_INPUT = @as(c_int, 0x200);
     pub const CP_UTF8 = @as(c_int, 65001);
@@ -194,14 +197,14 @@ pub fn getColumns(io: Io, in: File, out: File) !usize {
     }
 }
 
-pub fn clearScreen() !void {
+pub fn clearScreen(io: Io) !void {
     const stderr = File.stderr();
-    try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), "\x1b[H\x1b[2J");
+    try stderr.writeStreamingAll(io, "\x1b[H\x1b[2J");
 }
 
-pub fn beep() !void {
+pub fn beep(io: Io) !void {
     const stderr = File.stderr();
-    try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), "\x07");
+    try stderr.writeStreamingAll(io, "\x07");
 }
 
 var utf8ConsoleBuffer = [_]u8{0} ** 10;
